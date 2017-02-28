@@ -1,1 +1,1 @@
-from . import model, sample
+from . import model, translator
