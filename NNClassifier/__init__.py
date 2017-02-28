@@ -1,1 +1,2 @@
-from . import model, translator
+from .model import DrugClassArgs, DrugClassModel
+from .translator import Translator

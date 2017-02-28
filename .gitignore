@@ -1,7 +1,8 @@
 # Database files (Too large to host) #
 ######################################
-googDrugData.db
-googDrugData1.db
+*.db
+*.csv
+*.npz
 
 
 # Compiled Python files #
