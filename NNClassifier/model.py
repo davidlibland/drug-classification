@@ -145,12 +145,12 @@ class RNNClassifierModel(object):
                 #self._cost = tf.reduce_sum(loss) / self.args.batch_size
                 self._cost = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(labels = self._target_ID, logits = logits))
             
-#             with tf.name_scope('accuracy'):
-#                 with tf.name_scope('correct_prediction'):
-#                     correct_prediction = tf.equal(tf.argmax(, 1), tf.argmax(y_, 1))
-#                 with tf.name_scope('accuracy'):
-#                     accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
-#                 tf.scalar_summary('accuracy', accuracy)
+            with tf.name_scope('accuracy'):
+                with tf.name_scope('correct_prediction'):
+                    correct_prediction = tf.equal(tf.argmax(self._output_prob, 1), tf.cast(self._target_ID,tf.int64))
+                with tf.name_scope('accuracy'):
+                    self._accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+                tf.scalar_summary('accuracy', self._accuracy)
             if verbose:
                 tf.histogram_summary("output weights", softmax_w)
                 tf.histogram_summary("output biases", softmax_b)
@@ -186,6 +186,10 @@ class RNNClassifierModel(object):
     @property
     def target_ID(self):
         return self._target_ID
+        
+    @property
+    def accuracy(self):
+        return self._accuracy
     
     @property
     def initial_state(self):

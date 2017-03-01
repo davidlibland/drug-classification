@@ -62,23 +62,31 @@ def train_rnn(args):
         for i in range(config.MAX_EPOCHS):
             epoch_size = (((translatorObj.data_len) // args.batch_size) - 1)# // args.num_steps
             print("epoch_size: ",epoch_size)
+            #Shuffle the data:
+            translatorObj.suffle_training_set()
+            
             start_time = time.time()
             costs = 0.0
             iters = 0
+            accuracy = 0.0
             # we backpropogate over a fixed number (num_steps) of GRU units, but we save the final_state
             # so that we can train the rnn to remember things over a much longer string.
             for step, (x, y) in enumerate(translatorObj.id_iterator(args.batch_size)):
                 state = sess.run(p.initial_state)
-                summary, cost_on_iter, state, _ = sess.run([p.merged, p.cost, p.final_state, p.train_op],
+                summary, cost_on_iter, cur_acc, state, _ = sess.run([p.merged, p.cost, p.accuracy, p.final_state, p.train_op],
                                          {p.input_IDs: x,
                                           p.target_ID: y,
                                           p.initial_state: state})
                 costs += cost_on_iter
+                if step !=0:
+                    accuracy = ((step-1)*accuracy + cur_acc)/step
+                else:
+                    accuracy = cur_acc
                 #iters += args.num_steps
 
                 if step % (epoch_size // 10) == 10:
-                    print("%.3f avg. cross entr.: %.3f speed: %.0f samples\/s, epoch est. time rem: %.0f" %
-                        (step * 1.0 / epoch_size, np.exp(-costs / step),
+                    print("%.3f, accuracy: %.4f, emp. cross entr.: %.3f speed: %.0f samples/s, epoch est. time rem: %.0f" %
+                        (step * 1.0 / epoch_size, accuracy, np.exp(-costs / step),
                          step * args.batch_size / (time.time() - start_time), (time.time() - start_time)*epoch_size/(step*1.0)))
                     p.writer.add_summary(summary, i)
             p.writer.flush()
