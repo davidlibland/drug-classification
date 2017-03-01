@@ -3,68 +3,52 @@
 import time
 import tensorflow as tf
 import numpy as np
-from . import model
-from . import readData
-import copy
+from .model import RNNClassifierArgs, RNNClassifierModel
 import os
-from . import sample
 from . import config
+from .translator import Translator
 import dill
 
 
 
-def main():
-    global prepared_poems, themes, id_to_word, word_to_id
+def setup_and_run(translator_filename):
+    global translatorObj
     print("-"*30)
     print("Data Input")
     print("-"*30)
-    #raw_data_IDs, char_to_ix, ix_to_char, vocab_size  = readFile.raw_data('haiku.txt')
-    prepared_poems,word_to_id,id_to_word,themes=readPoetry.read_data(os.path.join(config.base_dir,'prepared_poem_data.pkl'))
-    prepared_poems=np.random.permutation(prepared_poems)[:config.NUM_POEMS]
-    # if we have a restricted sample of poems, make sure we restrict the themes appropriately:
-    if config.NUM_POEMS!= -1:
-        confined_word_set=set(sum([p[2] for p in prepared_poems],[]))
-        for thm in list(themes.keys()):
-            if word_to_id[thm] not in confined_word_set:
-                del(themes[thm])
-        if config.NUM_POEMS <=10 :
-            print('\n'.join(' '.join(id_to_word[w] for w in p[2]) for p in prepared_poems))
-    vocab_size=len(id_to_word)
-    theme_vocab_size=len(themes)
-    print("number of training poems: %d, vocab size: %d, theme size: %d" %(len(prepared_poems),vocab_size,theme_vocab_size))
-    args=model.PoetArgs(word_vocab_size=vocab_size,theme_vocab_size=vocab_size,
-            learning_rate=config.LEARNING_RATE,init_scale=1/(config.HIDDEN_SIZE+config.THEME_EMBEDDING_SIZE), # Xavier Initialization
+    # Load the translator object:
+    translatorObj = Translator(filename = translator_filename)
+
+    print("number of training examples: %d, vocab size: %d, number of classes: %d"
+     %(translatorObj.data_len,len(translatorObj.vocab),len(translatorObj.target_to_id)))
+     
+    # Setup the args...
+    args=RNNClassifierArgs(word_vocab_size = len(translatorObj.vocab),num_drug_classes = len(translatorObj.target_to_id),
+            learning_rate=config.LEARNING_RATE,init_scale=1/(config.HIDDEN_SIZE), # Xavier Initialization
             num_steps=config.NUM_STEPS,num_layers=config.NUM_LAYERS,
             batch_size=config.BATCH_SIZE,keep_prob=config.KEEP_PROB,
-            word_embedding_size=config.WORD_EMBEDDING_SIZE,theme_embedding_size=config.THEME_EMBEDDING_SIZE,
+            word_embedding_size=config.WORD_EMBEDDING_SIZE,
             hidden_size=config.HIDDEN_SIZE)
-    # Now save the dictionary, so that we can reload it.
-    # we ought to save the training data too, but we don't (to save space)
+            
+    # Now save the args so we can reload it when classifying
     if not os.path.exists(args.log_dir):
         os.makedirs(args.log_dir)
-    with open(os.path.join(args.log_dir,"dict.pkl"),'wb') as f:
-        dill.dump({'themes':themes,'word_to_id':word_to_id,'id_to_word':id_to_word,'args':args},f)
+    with open(os.path.join(args.log_dir,"args.pkl"),'wb') as f:
+        dill.dump({'args':args},f)
     train_rnn(args)
     tf.reset_default_graph() 
-    sample.sample(args.log_dir)
 
-def train_rnn(args,text_file=None,restore=False):
+def train_rnn(args):
     #if restore:
     #    load_rnn()
     print("-"*30)
     print("initialization")
     print("-"*30)
-    sample_args=copy.copy(args)
-    sample_args.num_steps=1
-    sample_args.batch_size=1
     
     # Initializer
     initializer = tf.random_uniform_initializer(-args.init_scale,args.init_scale)
     with tf.variable_scope("model", reuse = None, initializer = initializer):
-        p = model.PoetModel(args=args, is_training=True, verbose=True)
-    #with tf.variable_scope("model", reuse = True, initializer = initializer):
-        tf.get_variable_scope().reuse_variables()
-        p_sample = model.PoetModel(args=sample_args, is_training = False)
+        p = RNNClassifierModel(args=args, is_training=True, verbose=True)
                                             
     with tf.Session() as sess:
         print("-"*30)
@@ -76,28 +60,26 @@ def train_rnn(args,text_file=None,restore=False):
         
         saver = tf.train.Saver()
         for i in range(config.MAX_EPOCHS):
-            epoch_size = ((len(prepared_poems)*len(prepared_poems[0][2]) // args.batch_size) - 1) // args.num_steps
+            epoch_size = (((translatorObj.data_len) // args.batch_size) - 1)# // args.num_steps
             print("epoch_size: ",epoch_size)
             start_time = time.time()
             costs = 0.0
             iters = 0
             # we backpropogate over a fixed number (num_steps) of GRU units, but we save the final_state
             # so that we can train the rnn to remember things over a much longer string.
-            for step, (x, y,cur_themes,new_batch) in enumerate(readPoetry.id_iterator(prepared_poems, args.batch_size,args.num_steps)):
-                if new_batch:
-                    state = sess.run(p.initial_state,{p.theme_ID: cur_themes})
+            for step, (x, y) in enumerate(translatorObj.id_iterator(args.batch_size)):
+                state = sess.run(p.initial_state)
                 summary, cost_on_iter, state, _ = sess.run([p.merged, p.cost, p.final_state, p.train_op],
                                          {p.input_IDs: x,
-                                          p.target_IDs: y,
-                                          p.initial_state: state,
-                                          p.theme_ID:cur_themes})
+                                          p.target_ID: y,
+                                          p.initial_state: state})
                 costs += cost_on_iter
-                iters += args.num_steps
+                #iters += args.num_steps
 
                 if step % (epoch_size // 10) == 10:
-                    print("%.3f perplexity: %.3f speed: %.0f wps, epoch est. time rem: %.0f" %
-                        (step * 1.0 / epoch_size, np.exp(costs / iters),
-                         iters * args.batch_size / (time.time() - start_time), (time.time() - start_time)*epoch_size/(step*1.0)))
+                    print("%.3f avg. cross entr.: %.3f speed: %.0f samples\/s, epoch est. time rem: %.0f" %
+                        (step * 1.0 / epoch_size, np.exp(-costs / step),
+                         step * args.batch_size / (time.time() - start_time), (time.time() - start_time)*epoch_size/(step*1.0)))
                     p.writer.add_summary(summary, i)
             p.writer.flush()
             
@@ -107,13 +89,7 @@ def train_rnn(args,text_file=None,restore=False):
                 save_path = saver.save(sess, os.path.join(args.log_dir,"model.ckpt"),global_step=i)
                 print("Model saved in file: %s" % save_path)
             
-            # Now print a sample:
-            sample.sample_from_active_sess(sess,p_sample,word_to_id,id_to_word,themes,args)
         # Save the model one final time.
         # Save the model in case we want to load it later...
         save_path = saver.save(sess, os.path.join(args.log_dir,"model.ckpt"),global_step=i)
         print("Model saved in file: %s" % save_path)
-
-
-if __name__ == '__main__':
-    main()

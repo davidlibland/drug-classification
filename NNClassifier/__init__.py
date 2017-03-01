@@ -1,2 +1,3 @@
-from .model import DrugClassArgs, DrugClassModel
+from .model import RNNClassifierArgs, RNNClassifierModel
 from .translator import Translator
+from .train import setup_and_run

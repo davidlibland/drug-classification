@@ -10,7 +10,7 @@ from . import config
 #from tensorflow.models.rnn_* import rnn
 #import numpy as np
 
-class DrugClassArgs(object):
+class RNNClassifierArgs(object):
     def __init__(self,batch_size = 4, num_steps = 128, num_layers = 2, learning_rate = 0.01, max_grad_norm = 5.,
                     init_scale = 0.05, hidden_size = 128, keep_prob = .5, word_embedding_size = 32,
                     word_vocab_size = 128, num_drug_classes = 33,
@@ -64,7 +64,7 @@ class FastGRUCell(tf.nn.rnn_cell.RNNCell):
       new_h = u * state + (1 - u) * c
     return new_h, new_h
 
-class DrugClassModel(object):
+class RNNClassifierModel(object):
     def __init__(self,args, is_training=False, verbose=False):
         # First we store the configuration object as a component.
         self._args = args
@@ -143,7 +143,14 @@ class DrugClassModel(object):
                 #    [tf.reshape(self.target_IDs, [-1])],
                 #    [tf.ones([self.args.batch_size * self.args.num_steps])])
                 #self._cost = tf.reduce_sum(loss) / self.args.batch_size
-                self._cost = tf.nn.sparse_softmax_cross_entropy_with_logits(labels = self._target_ID, logits = logits)
+                self._cost = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(labels = self._target_ID, logits = logits))
+            
+#             with tf.name_scope('accuracy'):
+#                 with tf.name_scope('correct_prediction'):
+#                     correct_prediction = tf.equal(tf.argmax(, 1), tf.argmax(y_, 1))
+#                 with tf.name_scope('accuracy'):
+#                     accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+#                 tf.scalar_summary('accuracy', accuracy)
             if verbose:
                 tf.histogram_summary("output weights", softmax_w)
                 tf.histogram_summary("output biases", softmax_b)
@@ -177,8 +184,8 @@ class DrugClassModel(object):
         return self._input_IDs
     
     @property
-    def target_IDs(self):
-        return self._target_IDs
+    def target_ID(self):
+        return self._target_ID
     
     @property
     def initial_state(self):

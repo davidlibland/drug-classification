@@ -37,6 +37,7 @@ Experimental
 *.sql
 *.sqlite
 Terminal Saved Output*
+tmp
 
 # OS generated files #
 ######################
