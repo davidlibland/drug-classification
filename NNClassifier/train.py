@@ -33,7 +33,7 @@ def setup_and_run(translator_filename):
     # Now save the args so we can reload it when classifying
     if not os.path.exists(args.log_dir):
         os.makedirs(args.log_dir)
-    with open(os.path.join(args.log_dir,"args.pkl"),'wb') as f:
+    with open(os.path.join(args.log_dir,config.args_file),'wb') as f:
         dill.dump({'args':args},f)
     train_rnn(args)
     tf.reset_default_graph() 
@@ -72,7 +72,7 @@ def train_rnn(args):
             accuracy = 0.0
             # we backpropogate over a fixed number (num_steps) of GRU units, but we save the final_state
             # so that we can train the rnn to remember things over a much longer string.
-            for step, (x, y) in enumerate(translatorObj.id_iterator(args.batch_size)):
+            for step, (x, y) in enumerate(translatorObj.training_iterator(args.batch_size)):
                 state = sess.run(p.initial_state)
                 summary, cost_on_iter, cur_acc, state, _ = sess.run([p.merged, p.cost, p.accuracy, p.final_state, p.train_op],
                                          {p.input_IDs: x,
@@ -98,7 +98,7 @@ def train_rnn(args):
             accuracy_cnt = 0.0
             # we backpropogate over a fixed number (num_steps) of GRU units, but we save the final_state
             # so that we can train the rnn to remember things over a much longer string.
-            for step, (x, y) in enumerate(translatorObj.id_iterator(args.batch_size,testing=True)):
+            for step, (x, y) in enumerate(translatorObj.training_iterator(args.batch_size,testing=True)):
                 state = sess.run(p.initial_state)
                 summary, cost_on_iter, cur_acc, state, _ = sess.run([p.merged, p.cost, p.accuracy, p.final_state, p.train_op],
                                          {p.input_IDs: x,

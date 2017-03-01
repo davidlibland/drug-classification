@@ -3,7 +3,7 @@ import os
 base_dir = os.path.abspath(os.path.dirname(__file__))
 sampling_model_dir = 'Saved_Model_Dir'
 sampling_model = 'model.ckpt'
-sampling_dict = 'dict.pkl'
+args_file = 'args.pkl'
 SAMPLE_LENGTH = 32
 
 NUM_DRUG_CLASSES = 33

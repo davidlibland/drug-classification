@@ -120,7 +120,7 @@ class Translator():
     # This method iterates over the training/testing set.
     # it yields a pair (x,y), where x is an array of input phrases of shape (batch_size,max_input_phrase_length)
     # and y is a vector of targets of shape (batch_size).
-    def id_iterator(self, batch_size,testing = False):
+    def training_iterator(self, batch_size,testing = False):
         self.suffle_training_set()
         if testing:
             cur_length = self.test_len
@@ -131,7 +131,6 @@ class Translator():
             inputs = self.input_array
             targets = self.target_array
         
-        # num_steps: int, the number of unrolls, should be a divisor of poem_length+1.
         batch_len = cur_length // batch_size
 
         for j in range(batch_len):
@@ -139,6 +138,21 @@ class Translator():
             current_input_batch=inputs[j*batch_size:(j+1)*batch_size,:]
             current_target_batch=targets[j*batch_size:(j+1)*batch_size]
             yield (current_input_batch,current_target_batch)
+        
+    # This method iterates over the training/testing set.
+    # it yields a pair (x,y), where x is an array of input phrases of shape (batch_size,max_input_phrase_length)
+    # and y is a vector of targets of shape (batch_size).
+    def translating_iterator(self,phrases,batch_size):
+        inputs=np.array([self.translate_phrase(p) for p in phrases])
+        num_missing = batch_size - (inputs.shape[0] % batch_size)
+        inputs = np.append(inputs,[[self.word_to_id['<eof>']]*self.max_input_phrase_length]*num_missing,axis=0)
+        
+        batch_len = inputs.shape[0] // batch_size
+
+        for j in range(batch_len):
+            # Load the current batch
+            current_input_batch=inputs[j*batch_size:(j+1)*batch_size,:]
+            yield current_input_batch
             
     
     def save(self,filename):
