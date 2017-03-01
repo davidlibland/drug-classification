@@ -68,6 +68,7 @@ class RNNClassifierModel(object):
     def __init__(self,args, is_training=False, verbose=False):
         # First we store the configuration object as a component.
         self._args = args
+        self.keep_prob = tf.constant(self.args.keep_prob)
         
         # Create some placeholders for the input/output data
         self._input_IDs = tf.placeholder(tf.int32, [self.args.batch_size, self.args.num_steps],name="input_IDs") # batch_size x num_steps
@@ -88,7 +89,7 @@ class RNNClassifierModel(object):
                                         initializer=tf.random_normal_initializer(0, 1/self.args.hidden_size))
                     inputs = tf.nn.embedding_lookup(word_embedding, self.input_IDs,name="word_vect")
                 if is_training and self.args.keep_prob < 1:
-                    inputs = tf.nn.dropout(inputs, self.args.keep_prob)
+                    inputs = tf.nn.dropout(inputs, self.keep_prob)
             
             
             # Create the GRU Cell
@@ -97,7 +98,7 @@ class RNNClassifierModel(object):
             
             if is_training and self.args.keep_prob < 1:
                 cell = tf.nn.rnn_cell.DropoutWrapper(
-                            cell, output_keep_prob=self.args.keep_prob)
+                            cell, output_keep_prob=self.keep_prob)
             # Now stack the GRU Cell on top of itself self.args.num_layers times
             cell = tf.nn.rnn_cell.MultiRNNCell([cell] * self.args.num_layers)
             

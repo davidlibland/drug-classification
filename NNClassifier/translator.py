@@ -5,6 +5,8 @@ import re
 from collections import Counter
 import itertools
 
+test_proportion = 0.2
+
 class Translator():
     #input_phrases should be a list of input phrases
     #input_targets should be a corresponding list of the target classifications (also phrases)
@@ -32,7 +34,6 @@ class Translator():
             assert len(input_phrases) == len(input_targets),"Number of input phrases %d needs to be equal to \
                         the number of input targets %d"%(len(input_phrases),len(input_targets))
                         
-            self.data_len = len(input_phrases)
             # clean the input phrases:
             cleaned_inputs = [self.clean_phrase(p) for p in input_phrases]
             # count the words, to come up with the vocabulary:
@@ -59,12 +60,27 @@ class Translator():
             self.target_to_id={targ:id for id,targ in enumerate(targets)}
             self.id_to_target={id:targ for id,targ in enumerate(targets)}
         
-    #         self.translated_inputs_phrases = [self.translate_clean_phrase(p) for p in cleaned_inputs]
-    #         self.translated_targets = [self.target_to_id[t] for t in input_targets]
-        
-            #turn the poems into an array
+            #turn the data into an array
             self.input_array=np.array([self.translate_clean_phrase(p) for p in cleaned_inputs])
             self.target_array=np.array([self.target_to_id[t] for t in input_targets])
+            
+            #drop empty data:
+            mask = (self.input_array[:,0] != self.word_to_id['<eof>'])
+            self.input_array = self.input_array[mask,:]
+            self.target_array = self.target_array[mask]
+            num_dropped = len(input_phrases)-mask.sum()
+            if num_dropped>0:
+                print("We dropped %d uninformative training entries, %.3f%% of the input set"
+                            %(num_dropped,100.*num_dropped/len(input_phrases)))
+            
+            # Shuffle the data
+            self.suffle_training_set()
+            # Split of a testing set
+            test_size = int(test_proportion*self.target_array.shape[0])
+            self.input_array_test = self.input_array[:test_size,:]
+            self.target_array_test = self.target_array[:test_size]
+            self.input_array = self.input_array[test_size:,:]
+            self.target_array = self.target_array[test_size:]
     
     #The public method that should be used to translate a phrase to ids.
     def translate_phrase(self,phrase):
@@ -101,20 +117,29 @@ class Translator():
         self.input_array = self.input_array[p]
         self.target_array = self.target_array[p]
         
-    # This method iterates over the training set.
+    # This method iterates over the training/testing set.
     # it yields a pair (x,y), where x is an array of input phrases of shape (batch_size,max_input_phrase_length)
     # and y is a vector of targets of shape (batch_size).
-    def id_iterator(self, batch_size):
+    def id_iterator(self, batch_size,testing = False):
         self.suffle_training_set()
+        if testing:
+            cur_length = self.test_len
+            inputs = self.input_array_test
+            targets = self.target_array_test
+        else:
+            cur_length = self.data_len
+            inputs = self.input_array
+            targets = self.target_array
         
         # num_steps: int, the number of unrolls, should be a divisor of poem_length+1.
-        batch_len = self.data_len // batch_size
+        batch_len = cur_length // batch_size
 
         for j in range(batch_len):
             # Load the current batch
-            current_input_batch=self.input_array[j*batch_size:(j+1)*batch_size,:]
-            current_target_batch=self.target_array[j*batch_size:(j+1)*batch_size]
+            current_input_batch=inputs[j*batch_size:(j+1)*batch_size,:]
+            current_target_batch=targets[j*batch_size:(j+1)*batch_size]
             yield (current_input_batch,current_target_batch)
+            
     
     def save(self,filename):
         with open(filename,'wb') as file:
@@ -127,7 +152,9 @@ class Translator():
                  target_to_id = self.target_to_id,
                  id_to_target = self.id_to_target,
                  input_array = self.input_array,
-                 target_array = self.target_array)
+                 target_array = self.target_array,
+                 input_array_test = self.input_array_test,
+                 target_array_test = self.target_array_test)
     
     def load(self,filename):
         with open(filename,'rb') as file:
@@ -141,5 +168,14 @@ class Translator():
             self.id_to_target = npzfile['id_to_target'].item()
             self.input_array = npzfile['input_array']
             self.target_array = npzfile['target_array']
-            self.data_len = self.input_array.shape[0]
+            self.input_array_test = npzfile['input_array_test']
+            self.target_array_test = npzfile['target_array_test']
+    
+    @property
+    def data_len(self):
+        return self.input_array.shape[0]
+        
+    @property
+    def test_len(self):
+        return self.input_array_test.shape[0]
         
