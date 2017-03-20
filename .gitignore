@@ -4,6 +4,10 @@
 *.csv
 *.npz
 
+# Folder of Data (Too large to host, and there is code to collect it) #
+#######################################################################
+data/
+
 
 # Compiled Python files #
 #########################
