@@ -1,3 +1,3 @@
 import NNClassifier
 
-NNClassifier.setup_and_run('training_data.npz')
+NNClassifier.setup_and_run('data/training_data.npz')

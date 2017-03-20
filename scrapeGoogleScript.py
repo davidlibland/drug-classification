@@ -8,7 +8,7 @@ import sqlite3 as lite
 
 key = 'AIzaSyAkP1-7wumxY6mWPFaXdq9VFgCbET9Mp1k'
 #local database:
-database = 'googDrugData.db'
+database = 'data/googDrugData.db'
 
 quantityThreshold = 10
 startingEntry = 4045
