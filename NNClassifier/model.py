@@ -133,7 +133,7 @@ class RNNClassifierModel(object):
             # Transform the GRU output to logits via a learnt linear transform
             output = outputs[-1]#tf.reshape(tf.concat(1, outputs), [-1, size])
             softmax_w = tf.get_variable("softmax_w", [size, self.args.num_drug_classes],initializer=tf.random_normal_initializer(0,1/size))
-            softmax_b = tf.get_variable("softmax_b", [self.args.num_drug_classes],initializer=tf.constant_initializer(0.))
+            softmax_b = tf.get_variable("softmax_bias", [self.args.num_drug_classes],initializer=tf.constant_initializer(0.))
             logits = tf.matmul(output, softmax_w) + softmax_b
             self._output_prob=tf.nn.softmax(logits)
             
@@ -152,7 +152,7 @@ class RNNClassifierModel(object):
                 
                 self._l1 = self.args.lambda_loss_amount * sum(tf.reduce_sum(tf.abs(tf_var))
                                                             for tf_var in tf.trainable_variables()
-                                                            if not ("noreg" in tf_var.name or "Bias" in tf_var.name)
+                                                            if not ("noreg" in tf_var.name or "bias" in tf_var.name)
                                                     )
             
             with tf.name_scope('KL_Divergence'):
