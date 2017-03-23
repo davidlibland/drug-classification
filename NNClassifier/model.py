@@ -72,7 +72,7 @@ class RNNClassifierModel(object):
         
         # Create some placeholders for the input/output data
         self._input_IDs = tf.placeholder(tf.int32, [self.args.batch_size, self.args.num_steps],name="input_IDs") # batch_size x num_steps
-        self._target_ID = tf.placeholder(tf.int32, [self.args.batch_size],name="target_IDs") # batch_size x num_steps
+        self._target_probs = tf.placeholder(tf.float32, [self.args.batch_size, self.args.num_drug_classes],name="target_probs") # batch_size x classes
                 
         if is_training:
             name_scope = "rnnTrainer"
@@ -144,14 +144,17 @@ class RNNClassifierModel(object):
                 #    [tf.reshape(self.target_IDs, [-1])],
                 #    [tf.ones([self.args.batch_size * self.args.num_steps])])
                 #self._cost = tf.reduce_sum(loss) / self.args.batch_size
-                self._cost = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(labels = self._target_ID, logits = logits))
+                self._cross_entropy = tf.nn.softmax_cross_entropy_with_logits(labels = self._target_probs, logits = logits)
+                self._cost = tf.reduce_mean(self._cross_entropy)
             
-            with tf.name_scope('accuracy'):
+            with tf.name_scope('KL_Divergence'):
                 with tf.name_scope('correct_prediction'):
-                    correct_prediction = tf.equal(tf.argmax(self._output_prob, 1), tf.cast(self._target_ID,tf.int64))
-                with tf.name_scope('accuracy'):
-                    self._accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
-                tf.scalar_summary('accuracy', self._accuracy)
+                    masked_out = tf.boolean_mask(self._output_prob,tf.logical_not(tf.equal(self._output_prob,tf.constant(0.))))
+                    avg_entropy = -tf.reduce_sum(tf.mul(masked_out,tf.log(masked_out)))/size
+                    #kl_div = entropy+tf.reduce_mean(self._cross_entropy)
+                with tf.name_scope('average_KL_Divergence'):
+                    self._average_KL_Divergence = avg_entropy+tf.reduce_mean(self._cross_entropy)
+                tf.scalar_summary('average_KL_Divergence', self._average_KL_Divergence)
             if verbose:
                 tf.histogram_summary("output weights", softmax_w)
                 tf.histogram_summary("output biases", softmax_b)
@@ -185,12 +188,12 @@ class RNNClassifierModel(object):
         return self._input_IDs
     
     @property
-    def target_ID(self):
-        return self._target_ID
+    def target_probs(self):
+        return self._target_probs
         
     @property
-    def accuracy(self):
-        return self._accuracy
+    def average_KL_Divergence(self):
+        return self._average_KL_Divergence
     
     @property
     def initial_state(self):

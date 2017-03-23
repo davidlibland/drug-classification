@@ -54,18 +54,38 @@ class Translator():
             # Create the translation dictionary from words to ids:
             self.word_to_id={word:id for id,word in enumerate(self.vocab)}
             self.id_to_word={id:word for id,word in enumerate(self.vocab)}
-        
+            
             # Create the translation dictionary from targets to ids:
-            targets = list(set(input_targets))
+            if kwargs.get('mult_targets',False):
+                #split the targets at '|'
+                targets = list(set(itertools.chain.from_iterable(map(lambda x: x.split('|'), input_targets))))
+                if kwargs.get('unk_target',False):
+                    targets.remove(kwargs.get('unk_target'))
+            else:
+                targets = list(set(input_targets))
             self.target_to_id={targ:id for id,targ in enumerate(targets)}
             self.id_to_target={id:targ for id,targ in enumerate(targets)}
         
             #turn the data into an array
             self.input_array=np.array([self.translate_clean_phrase(p) for p in cleaned_inputs])
-            self.target_array=np.array([self.target_to_id[t] for t in input_targets])
+            #one hot encoding of targets:
+            eye = np.eye(N=len(targets))
+            if kwargs.get('mult_targets',False):
+                def prob_class_vect(class_str):
+                    class_list = class_str.split('|')
+                    if kwargs.get('unk_target',False):
+                        # drop 'unknown' target classes.
+                        class_list = filter(lambda x: x!=kwargs.get('unk_target'),class_list)
+                    classes = map(self.target_to_id.get,class_list)
+                    class_vects = map(lambda x: eye[:,x],classes)
+                    return np.stack(class_vects).mean(axis = 0)
+                self.target_array=np.vstack(map(prob_class_vect,input_targets))
+            else:
+                self.target_array=np.vstack([eye[:,self.target_to_id[t]] for t in input_targets])
             
             #drop empty data:
-            mask = (self.input_array[:,0] != self.word_to_id['<eof>'])
+            informative = np.logical_and(self.input_array != self.word_to_id['<eof>'], self.input_array != self.word_to_id['<unk>'])
+            mask = np.any(informative,axis = 1)
             self.input_array = self.input_array[mask,:]
             self.target_array = self.target_array[mask]
             num_dropped = len(input_phrases)-mask.sum()
@@ -78,9 +98,9 @@ class Translator():
             # Split of a testing set
             test_size = int(test_proportion*self.target_array.shape[0])
             self.input_array_test = self.input_array[:test_size,:]
-            self.target_array_test = self.target_array[:test_size]
+            self.target_array_test = self.target_array[:test_size,:]
             self.input_array = self.input_array[test_size:,:]
-            self.target_array = self.target_array[test_size:]
+            self.target_array = self.target_array[test_size:,:]
     
     #The public method that should be used to translate a phrase to ids.
     def translate_phrase(self,phrase):
@@ -136,7 +156,7 @@ class Translator():
         for j in range(batch_len):
             # Load the current batch
             current_input_batch=inputs[j*batch_size:(j+1)*batch_size,:]
-            current_target_batch=targets[j*batch_size:(j+1)*batch_size]
+            current_target_batch=targets[j*batch_size:(j+1)*batch_size,:]
             yield (current_input_batch,current_target_batch)
         
     # This method iterates over the training/testing set.
