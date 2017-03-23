@@ -28,7 +28,8 @@ def setup_and_run(translator_filename):
             num_steps=config.NUM_STEPS,num_layers=config.NUM_LAYERS,
             batch_size=config.BATCH_SIZE,keep_prob=config.KEEP_PROB,
             word_embedding_size=config.WORD_EMBEDDING_SIZE,
-            hidden_size=config.HIDDEN_SIZE)
+            hidden_size=config.HIDDEN_SIZE,
+            lambda_loss_amount=config.LAMBDA_LOSS)
             
     # Now save the args so we can reload it when classifying
     if not os.path.exists(args.log_dir):

@@ -14,7 +14,8 @@ class RNNClassifierArgs(object):
     def __init__(self,batch_size = 4, num_steps = 128, num_layers = 2, learning_rate = 0.01, max_grad_norm = 5.,
                     init_scale = 0.05, hidden_size = 128, keep_prob = .5, word_embedding_size = 32,
                     word_vocab_size = 128, num_drug_classes = 33,
-                    log_dir=os.path.join(config.base_dir,"tmp/DrugLog"+datetime.datetime.now().isoformat())):
+                    log_dir=os.path.join(config.base_dir,"tmp/DrugLog"+datetime.datetime.now().isoformat()),
+                    lambda_loss_amount = 0.005):
         self.batch_size = batch_size
         self.num_steps = num_steps
         self.num_layers = num_layers
@@ -27,6 +28,7 @@ class RNNClassifierArgs(object):
         self.word_vocab_size = word_vocab_size
         self.num_drug_classes = num_drug_classes
         self.log_dir=log_dir
+        self.lambda_loss_amount = lambda_loss_amount
     
     def __repr__(self):
         return (str(self.__dict__))
@@ -123,6 +125,7 @@ class RNNClassifierModel(object):
             inputs = [tf.squeeze(input_, [1])
                       for input_ in tf.split(1, self.args.num_steps, inputs)]
             outputs, state = tf.nn.rnn(cell, inputs, initial_state=self.initial_state)
+            
 
             self._final_state=state #Save the final state so we can access it later when training.
             
@@ -146,6 +149,11 @@ class RNNClassifierModel(object):
                 #self._cost = tf.reduce_sum(loss) / self.args.batch_size
                 self._cross_entropy = tf.nn.softmax_cross_entropy_with_logits(labels = self._target_probs, logits = logits)
                 self._cost = tf.reduce_mean(self._cross_entropy)
+                
+                self._l1 = self.args.lambda_loss_amount * sum(tf.reduce_sum(tf.abs(tf_var))
+                                                            for tf_var in tf.trainable_variables()
+                                                            if not ("noreg" in tf_var.name or "Bias" in tf_var.name)
+                                                    )
             
             with tf.name_scope('KL_Divergence'):
                 with tf.name_scope('correct_prediction'):
@@ -163,6 +171,8 @@ class RNNClassifierModel(object):
                 tf.scalar_summary("output biases zero fraction", tf.nn.zero_fraction(softmax_b))
                 tf.scalar_summary("word embedding zero fraction", tf.nn.zero_fraction(word_embedding))
                 tf.scalar_summary('cross entropy', self.cost)
+                tf.scalar_summary('l1 loss', self.l1)
+                tf.scalar_summary('total loss', self.l1+self.cost)
                 # Merge all the summaries and write them out to /tmp/mnist_logs (by default)
                 self._merged = tf.merge_all_summaries()
                 self._writer = tf.train.SummaryWriter(self.args.log_dir,
@@ -173,7 +183,7 @@ class RNNClassifierModel(object):
                 
             with tf.name_scope('train'):
                 tvars = tf.trainable_variables()
-                grads, _ = tf.clip_by_global_norm(tf.gradients(self.cost, tvars),self.args.max_grad_norm)
+                grads, _ = tf.clip_by_global_norm(tf.gradients(self.cost+self.l1, tvars),self.args.max_grad_norm)
                 optimizer = tf.train.AdamOptimizer(self.args.learning_rate)
                 self._train_op = optimizer.apply_gradients(zip(grads, tvars))
                     
@@ -202,6 +212,10 @@ class RNNClassifierModel(object):
     @property
     def cost(self):
         return self._cost
+        
+    @property
+    def l1(self):
+        return self._l1
     
     @property
     def final_state(self):
